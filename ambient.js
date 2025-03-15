@@ -105,43 +105,67 @@ class AmbientGenerator {
     setupInstruments() {
         const oscillatorTypes = ["sine", "triangle", "sine4", "sine8"];
         
-        // Pad synth with random oscillator
-        this.padSynth = new Tone.PolySynth(Tone.Synth, {
-            oscillator: {
-                type: oscillatorTypes[Math.floor(this.random() * oscillatorTypes.length)]
-            },
-            envelope: {
-                attack: this.random() * 2 + 1,
-                decay: this.random() * 0.5,
-                sustain: this.random() * 0.3 + 0.6,
-                release: this.random() * 3 + 2
+        // Helper function to create synth configuration
+        const createSynthConfig = () => {
+            const isFM = this.random() < 0.33;
+            
+            if (isFM) {
+                return {
+                    type: 'FM',
+                    config: {
+                        harmonicity: this.random() * 2 + 1,
+                        modulationIndex: this.random() * 5 + 1,
+                        oscillator: {
+                            type: oscillatorTypes[Math.floor(this.random() * oscillatorTypes.length)]
+                        },
+                        envelope: {
+                            attack: this.random() * 2 + 1,
+                            decay: this.random() * 2 + 1,
+                            sustain: this.random() * 0.3 + 0.6,
+                            release: this.random() * 3 + 2
+                        }
+                    }
+                };
+            } else {
+                return {
+                    type: 'Poly',
+                    config: {
+                        oscillator: {
+                            type: oscillatorTypes[Math.floor(this.random() * oscillatorTypes.length)]
+                        },
+                        envelope: {
+                            attack: this.random() * 2 + 1,
+                            decay: this.random() * 0.5,
+                            sustain: this.random() * 0.3 + 0.6,
+                            release: this.random() * 3 + 2
+                        }
+                    }
+                };
             }
-        }).connect(this.chorus);
+        };
 
-        // Bass synth
-        this.bassSynth = new Tone.Synth({
-            oscillator: {
-                type: "triangle"
-            },
-            envelope: {
-                attack: this.random() * 0.3 + 0.2,
-                decay: this.random() * 0.2,
-                sustain: this.random() * 0.2 + 0.7,
-                release: this.random() * 2 + 1
-            }
-        }).connect(this.mainReverb);
+        // Create synth configurations
+        const padConfig = createSynthConfig();
+        const bassConfig = createSynthConfig();
+        const textureConfig = createSynthConfig();
+        const texture2Config = createSynthConfig();
 
-        // Texture synth with random FM settings
-        this.textureSynth = new Tone.FMSynth({
-            harmonicity: this.random() * 2 + 1,
-            modulationIndex: this.random() * 5 + 1,
-            envelope: {
-                attack: this.random() * 2 + 2,
-                decay: this.random() * 2 + 1,
-                sustain: this.random() * 0.3 + 0.6,
-                release: this.random() * 3 + 2
-            }
-        }).connect(this.chorus);
+        // Initialize synths based on configurations
+        this.padSynth = padConfig.type === 'FM' 
+            ? new Tone.FMSynth(padConfig.config).connect(this.chorus)
+            : new Tone.PolySynth(Tone.Synth, padConfig.config).connect(this.chorus);
+
+        this.bassSynth = bassConfig.type === 'FM'
+            ? new Tone.FMSynth(bassConfig.config).connect(this.mainReverb)
+            : new Tone.PolySynth(Tone.Synth, bassConfig.config).connect(this.mainReverb);
+
+        this.textureSynth = textureConfig.type === 'FM'
+            ? new Tone.FMSynth(textureConfig.config).connect(this.chorus)
+            : new Tone.PolySynth(Tone.Synth, textureConfig.config).connect(this.chorus);
+
+        this.texture2Synth = texture2Config.type === 'FM'
+            ? new Tone.FMSynth(texture2Config.config).connect(this.chorus)
+            : new Tone.PolySynth(Tone.Synth, texture2Config.config).connect(this.chorus);
     }
 
     generateMelody() {
@@ -187,6 +211,15 @@ class AmbientGenerator {
                 this.textureSynth.triggerAttackRelease(note, duration, time);
             }
         }, "4n");
+
+        // Second texture pattern with different timing and probability
+        this.texture2Loop = new Tone.Loop(time => {
+            if (this.random() < 0.6) { // 60% chance to play
+                const note = melody[Math.floor(this.random() * melody.length)];
+                const duration = this.getRandomTiming();
+                this.texture2Synth.triggerAttackRelease(note, duration, time);
+            }
+        }, "2n");
     }
 
     async togglePlayPause() {
@@ -204,11 +237,13 @@ class AmbientGenerator {
                 this.padLoop.start(0);
                 this.bassLoop.start("0:1");  // Start bass loop slightly offset
                 this.textureLoop.start("0:2");  // Start texture loop even more offset
+                this.texture2Loop.start("0:3");  // Start second texture loop with more offset
                 Tone.Transport.start();
             } else {
                 this.padLoop.stop();
                 this.bassLoop.stop();
                 this.textureLoop.stop();
+                this.texture2Loop.stop();
                 Tone.Transport.stop();
                 Tone.Transport.position = 0;
             }
@@ -432,8 +467,15 @@ class NostrLogin {
     }
 
     async togglePlay() {
-        if (!this.generator) {
+        if (!this.pubkey) {
             alert('Please login first');
+            return;
+        }
+
+        // If we're logged in but haven't initialized audio yet, simulate clicking the start button
+        const startButton = document.getElementById('startAudioButton');
+        if (startButton && startButton.style.display !== 'none') {
+            startButton.click();
             return;
         }
 
