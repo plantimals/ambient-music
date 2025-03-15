@@ -275,6 +275,67 @@ class NostrLogin {
         }
     }
 
+    async fetchProfile(pubkey) {
+        try {
+
+            const pool = new NostrTools.SimplePool();
+            const relays = [
+                'wss://relay.damus.io',
+                'wss://nos.lol',
+                'wss://relay.nostr.band',
+                'wss://relay.current.fyi',
+                'wss://nostr.mom'
+            ];
+
+            try {
+                // Set a timeout of 5 seconds for the relay query
+                const profileEvent = await Promise.race([
+                    pool.get(
+                        relays,
+                        {
+                            kinds: [0],
+                            authors: [pubkey]
+                        }
+                    ),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
+                    )
+                ]);
+
+                if (profileEvent) {
+                    try {
+                        const content = JSON.parse(profileEvent.content);
+                        if (content.picture) {
+                            return content.picture;
+                        }
+                    } catch (e) {
+                        console.error("Error parsing profile content:", e);
+                    }
+                }
+            } finally {
+                // Always clean up the pool
+                pool.close(relays);
+            }
+
+            return null;
+        } catch (error) {
+            console.error("Error fetching profile:", error);
+            return null;
+        }
+    }
+
+    async updateAvatar(avatarUrl) {
+        const avatar = this.userInfo.querySelector('.avatar');
+        const npub = NostrTools.nip19.npubEncode(this.pubkey);
+        const shortNpub = `${npub.slice(0, 8)}...${npub.slice(-4)}`;
+
+        if (avatarUrl) {
+            avatar.innerHTML = `<img src="${avatarUrl}" alt="Profile" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+        } else {
+            avatar.textContent = shortNpub.slice(0, 2).toUpperCase();
+        }
+    }
+
     async handleSuccessfulLogin(pubkey) {
         this.pubkey = pubkey;
         const numericSeed = this.pubkey.split('').reduce((acc, char) => {
@@ -282,16 +343,35 @@ class NostrLogin {
         }, 0);
         
         this.loginButton.style.display = 'none';
-        this.userInfo.style.display = 'block';
+        this.userInfo.style.display = 'flex';
         
         const npub = NostrTools.nip19.npubEncode(this.pubkey);
-        this.userInfo.innerHTML = `
-            <p>${npub}</p>
-            <button id="startAudioButton" style="background: #8257e6; color: #ffffff; border: none; padding: 15px 30px; border-radius: 50px; cursor: pointer; margin-top: 10px;">Start Audio</button>
-        `;
+        const shortNpub = `${npub.slice(0, 8)}...${npub.slice(-4)}`;
+        
+        // Update the npub display
+        const npubSpan = this.userInfo.querySelector('.npub');
+        npubSpan.textContent = shortNpub;
+        
+        // Set default avatar while loading
+        await this.updateAvatar(null);
+        
+        // Fetch and update avatar
+        const avatarUrl = await this.fetchProfile(this.pubkey);
+        if (avatarUrl) {
+            await this.updateAvatar(avatarUrl);
+        }
+        
+        // Add the start audio button to the main content
+        const mainContent = document.querySelector('.main-content');
+        const startButton = document.createElement('button');
+        startButton.id = 'startAudioButton';
+        startButton.style.background = '#8257e6';
+        startButton.style.color = '#ffffff';
+        startButton.textContent = 'Start Audio';
+        mainContent.insertBefore(startButton, this.playPauseButton);
 
         // Add click handler for the start audio button
-        document.getElementById('startAudioButton').addEventListener('click', async () => {
+        startButton.addEventListener('click', async () => {
             try {
                 await Tone.start();
                 console.log("Tone.js started successfully");
@@ -305,7 +385,7 @@ class NostrLogin {
                 console.log("Playback started:", isPlaying);
                 
                 // Show play/pause button and hide start button
-                document.getElementById('startAudioButton').style.display = 'none';
+                startButton.style.display = 'none';
                 this.playPauseButton.style.display = 'inline-block';
                 this.playPauseButton.textContent = 'Pause';
             } catch (error) {
@@ -338,7 +418,12 @@ class NostrLogin {
         this.loginButton.style.display = 'inline-block';
         this.userInfo.style.display = 'none';
         this.playPauseButton.style.display = 'none';
-        this.userInfo.innerHTML = '';
+        
+        // Remove start button if it exists
+        const startButton = document.getElementById('startAudioButton');
+        if (startButton) {
+            startButton.remove();
+        }
         
         // Stop any playing audio
         if (this.generator && this.generator.isPlaying) {

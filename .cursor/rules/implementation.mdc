@@ -6,3 +6,5 @@ alwaysApply: false
 we will never be using tsx, react, etc
 
 this is a pure-vanilla js project
+
+we are using the nostr-tools library to implement all of our interactions with nostr.

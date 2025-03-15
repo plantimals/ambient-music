@@ -12,14 +12,88 @@
     <style>
         body {
             background: linear-gradient(135deg, #1a1a1a, #2a2a2a);
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        .header {
+            position: fixed;
+            top: 0;
+            right: 0;
+            padding: 20px;
+            z-index: 1000;
+        }
+
+        .main-content {
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
+
+        .user-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(74, 74, 74, 0.3);
+            padding: 8px 15px;
+            border-radius: 25px;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .user-controls:hover {
+            background: rgba(74, 74, 74, 0.4);
+        }
+
+        .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #4a4a4a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: white;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+
+        .avatar img.loading {
+            opacity: 0;
+        }
+
+        .npub {
+            color: #ffffff;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.8rem;
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .logout-btn {
+            background: none;
+            border: none;
+            color: #ff4757;
+            padding: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
         button {
             background: #4a4a4a;
             color: #ffffff;
@@ -31,52 +105,53 @@
             font-size: 18px;
             margin: 10px;
         }
+
         button:hover {
             background: #5a5a5a;
         }
-        #loginContainer {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        #userInfo {
-            color: #ffffff;
-            margin: 20px 0;
-            display: none;
-            font-family: 'Space Mono', monospace;
-            font-size: 1.2rem;
-            letter-spacing: 1px;
-            background: rgba(74, 74, 74, 0.3);
-            padding: 15px 25px;
-            border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(5px);
-        }
-        #playPauseButton {
-            display: none;
-        }
-        .profile-img {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            margin-right: 10px;
-            vertical-align: middle;
-        }
+
         #loginButton {
             background: #8257e6;
+            padding: 10px 20px;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border-radius: 50%;
+            transition: all 0.3s ease;
         }
+
         #loginButton:hover {
             background: #9466ff;
+            transform: scale(1.05);
+        }
+
+        #userInfo {
+            display: none;
+        }
+
+        #playPauseButton {
+            display: none;
         }
     </style>
 </head>
 <body>
-    <div id="loginContainer">
-        <button id="loginButton" 
-                onclick="nostrLogin.login()">Login with Nostr</button>
-        <div id="userInfo"></div>
+    <div class="header">
+        <div id="loginContainer">
+            <button id="loginButton">Login with Nostr</button>
+            <div id="userInfo" class="user-controls">
+                <div class="avatar"></div>
+                <span class="npub"></span>
+                <button class="logout-btn" onclick="nostrLogin.logout()">×</button>
+            </div>
+        </div>
     </div>
-    <button id="playPauseButton" 
-            onclick="nostrLogin.togglePlay()">Play</button>
+    <div class="main-content">
+        <button id="playPauseButton" onclick="nostrLogin.togglePlay()">Play</button>
+    </div>
     <script src="ambient.js"></script>
 </body>
 </html> 
