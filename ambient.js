@@ -303,7 +303,9 @@ class NostrLogin {
                 this.userInfo.style.display = 'block';
                 this.playPauseButton.style.display = 'inline-block';
                 
-                this.userInfo.innerHTML = `<p>Connected with: ${this.pubkey.slice(0, 8)}...</p>`;
+                const npub = NostrTools.nip19.npubEncode(this.pubkey);
+                console.log('NPUB:', npub);
+                this.userInfo.innerHTML = `<p>Connected with: ${npub.slice(0, 12)}...</p>`;
 
                 this.generator = new AmbientGenerator(numericSeed);
                 // Start playing automatically
