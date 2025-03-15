@@ -222,6 +222,8 @@ class NostrLogin {
         this.playPauseButton = document.getElementById('playPauseButton');
         
         this.setupEventListeners();
+        // Try automatic login
+        this.attemptAutoLogin();
     }
 
     setupEventListeners() {
@@ -245,6 +247,39 @@ class NostrLogin {
         });
     }
 
+    async attemptAutoLogin() {
+        if (typeof window.nostr !== 'undefined') {
+            try {
+                const pubkey = await window.nostr.getPublicKey();
+                if (pubkey) {
+                    this.pubkey = pubkey;
+                    const numericSeed = this.pubkey.split('').reduce((acc, char) => {
+                        return (acc * 31 + char.charCodeAt(0)) >>> 0;
+                    }, 0);
+                    
+                    this.loginButton.style.display = 'none';
+                    this.logoutButton.style.display = 'none';
+                    this.userInfo.style.display = 'block';
+                    this.playPauseButton.style.display = 'inline-block';
+                    
+                    this.userInfo.innerHTML = `<p>Connected with: ${this.pubkey.slice(0, 8)}...</p>`;
+
+                    this.generator = new AmbientGenerator(numericSeed);
+                    // Start playing automatically
+                    await this.generator.togglePlayPause();
+                    this.playPauseButton.textContent = 'Pause';
+                }
+            } catch (error) {
+                console.log('Auto-login failed, manual login required');
+                // Show login button if auto-login fails
+                this.loginButton.style.display = 'inline-block';
+            }
+        } else {
+            // Show login button if nostr is not available
+            this.loginButton.style.display = 'inline-block';
+        }
+    }
+
     login() {
         if (typeof window.nostr === 'undefined') {
             alert('Please install a Nostr extension (like nos2x or Alby)');
@@ -252,7 +287,7 @@ class NostrLogin {
         }
 
         window.nostr.getPublicKey()
-            .then(pubkey => {
+            .then(async pubkey => {
                 this.pubkey = pubkey;
                 
                 if (!this.pubkey) {
@@ -264,14 +299,16 @@ class NostrLogin {
                 }, 0);
                 
                 this.loginButton.style.display = 'none';
-                this.logoutButton.style.display = 'inline-block';
+                this.logoutButton.style.display = 'none';
                 this.userInfo.style.display = 'block';
                 this.playPauseButton.style.display = 'inline-block';
                 
                 this.userInfo.innerHTML = `<p>Connected with: ${this.pubkey.slice(0, 8)}...</p>`;
 
                 this.generator = new AmbientGenerator(numericSeed);
-                seedDisplay.textContent = `Seed: ${numericSeed}`;
+                // Start playing automatically
+                await this.generator.togglePlayPause();
+                this.playPauseButton.textContent = 'Pause';
             })
             .catch(error => {
                 console.error('Error in getPublicKey:', error);
@@ -296,12 +333,6 @@ class NostrLogin {
         this.generator = null;
     }
 }
-
-// Create the seed display element
-const seedDisplay = document.createElement('div');
-seedDisplay.style.color = '#ffffff';
-seedDisplay.style.marginTop = '10px';
-document.body.appendChild(seedDisplay);
 
 // Initialize Nostr login
 const nostrLogin = new NostrLogin(); 

@@ -1,0 +1,8 @@
+---
+description: consider this when thinking about how to organize the code, which languages and components to us
+globs: *.js *.ts *.tsx *jsx *.svg *.html
+alwaysApply: false
+---
+we will never be using tsx, react, etc
+
+this is a pure-vanilla js project
