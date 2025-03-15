@@ -11,8 +11,35 @@ class AmbientGenerator {
             pentatonicMinor: ['C', 'Eb', 'F', 'G', 'Bb'],
             mixolydian: ['C', 'D', 'E', 'F', 'G', 'A', 'Bb'],
             dorian: ['C', 'D', 'Eb', 'F', 'G', 'A', 'Bb'],
-            lydian: ['C', 'D', 'E', 'F#', 'G', 'A', 'B']
+            lydian: ['C', 'D', 'E', 'F#', 'G', 'A', 'B'],
+            harmonicMinor: ['C', 'D', 'Eb', 'F', 'G', 'Ab', 'B'],
+            wholeTone: ['C', 'D', 'E', 'F#', 'G#', 'A#'],
+            octatonic: ['C', 'D', 'Eb', 'F', 'F#', 'G#', 'A', 'B'],
+            chromatic: ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
         };
+
+        // Chord types for progression generation
+        this.chordTypes = {
+            major: [0, 4, 7],
+            minor: [0, 3, 7],
+            diminished: [0, 3, 6],
+            augmented: [0, 4, 8],
+            sus2: [0, 2, 7],
+            sus4: [0, 5, 7],
+            major7: [0, 4, 7, 11],
+            minor7: [0, 3, 7, 10],
+            dominant7: [0, 4, 7, 10]
+        };
+
+        // Common chord progressions templates (scale degrees)
+        this.progressionTemplates = [
+            [1, 4, 5, 1],        // I-IV-V-I
+            [1, 6, 4, 5],        // I-vi-IV-V
+            [2, 5, 1, 6],        // ii-V-I-vi
+            [1, 4, 6, 5],        // I-IV-vi-V
+            [6, 4, 1, 5],        // vi-IV-I-V
+            [1, 5, 6, 4]         // I-V-vi-IV
+        ];
     }
 
     async initialize() {
@@ -25,11 +52,25 @@ class AmbientGenerator {
             Tone.Transport.stop();
             Tone.Transport.position = 0;
             
-            // Initialize Tone.js components
+            // Initialize evolution parameters
+            this.evolutionState = {
+                currentSection: 0,
+                sectionDuration: 32, // measures per section
+                lastSectionChange: 0,
+                parameterChanges: this.initializeParameterChanges()
+            };
+            
+            // Initialize components
             await this.initializeComponents();
             this.setupEffects();
             this.setupInstruments();
             this.setupPatterns();
+            
+            // Setup evolution callback
+            Tone.Transport.scheduleRepeat(time => {
+                this.evolveParameters(time);
+            }, "4n");
+            
             this.initialized = true;
         }
     }
@@ -50,7 +91,22 @@ class AmbientGenerator {
 
     getRandomScale() {
         const scales = Object.keys(this.scales);
-        return this.scales[scales[Math.floor(this.random() * scales.length)]];
+        const selectedScale = this.scales[scales[Math.floor(this.random() * scales.length)]];
+        
+        // Occasionally add chromatic passing tones
+        if (this.random() < 0.2) {
+            const chromaticNotes = this.scales.chromatic;
+            const numPassingTones = Math.floor(this.random() * 2) + 1;
+            
+            for (let i = 0; i < numPassingTones; i++) {
+                const passingNote = chromaticNotes[Math.floor(this.random() * chromaticNotes.length)];
+                if (!selectedScale.includes(passingNote)) {
+                    selectedScale.push(passingNote);
+                }
+            }
+        }
+        
+        return selectedScale;
     }
 
     getRandomOctave() {
@@ -103,69 +159,121 @@ class AmbientGenerator {
     }
 
     setupInstruments() {
-        const oscillatorTypes = ["sine", "triangle", "sine4", "sine8"];
+        const oscillatorTypes = [
+            "sine", "triangle", "sine4", "sine8", "square", "sawtooth",
+            "fatsawtooth", "amsine", "fmsine", "pulse",
+            {
+                type: "custom",
+                partials: Array.from({length: 8}, () => this.random())
+            }
+        ];
         
-        // Helper function to create synth configuration
+        // Helper function to create synth configuration with enhanced options
         const createSynthConfig = () => {
-            const isFM = this.random() < 0.33;
+            const synthType = this.random();
             
-            if (isFM) {
+            if (synthType < 0.3) { // FM Synthesis
                 return {
                     type: 'FM',
                     config: {
-                        harmonicity: this.random() * 2 + 1,
-                        modulationIndex: this.random() * 5 + 1,
+                        harmonicity: this.random() * 4 + 0.5,
+                        modulationIndex: this.random() * 10 + 1,
                         oscillator: {
                             type: oscillatorTypes[Math.floor(this.random() * oscillatorTypes.length)]
                         },
-                        envelope: {
-                            attack: this.random() * 2 + 1,
-                            decay: this.random() * 2 + 1,
-                            sustain: this.random() * 0.3 + 0.6,
-                            release: this.random() * 3 + 2
-                        }
+                        envelope: this.createComplexEnvelope(),
+                        modulation: {
+                            type: oscillatorTypes[Math.floor(this.random() * oscillatorTypes.length)]
+                        },
+                        modulationEnvelope: this.createComplexEnvelope()
                     }
                 };
-            } else {
+            } else if (synthType < 0.6) { // AM Synthesis
+                return {
+                    type: 'AM',
+                    config: {
+                        harmonicity: this.random() * 3 + 0.5,
+                        oscillator: {
+                            type: oscillatorTypes[Math.floor(this.random() * oscillatorTypes.length)]
+                        },
+                        envelope: this.createComplexEnvelope(),
+                        modulation: {
+                            type: oscillatorTypes[Math.floor(this.random() * oscillatorTypes.length)]
+                        },
+                        modulationEnvelope: this.createComplexEnvelope()
+                    }
+                };
+            } else { // Enhanced Poly Synth
                 return {
                     type: 'Poly',
                     config: {
                         oscillator: {
-                            type: oscillatorTypes[Math.floor(this.random() * oscillatorTypes.length)]
+                            type: oscillatorTypes[Math.floor(this.random() * oscillatorTypes.length)],
+                            count: Math.floor(this.random() * 3) + 1,
+                            spread: this.random() * 40
                         },
-                        envelope: {
-                            attack: this.random() * 2 + 1,
-                            decay: this.random() * 0.5,
-                            sustain: this.random() * 0.3 + 0.6,
-                            release: this.random() * 3 + 2
+                        envelope: this.createComplexEnvelope(),
+                        filter: {
+                            type: this.random() < 0.5 ? 'lowpass' : 'highpass',
+                            frequency: this.random() * 10000 + 100,
+                            Q: this.random() * 5 + 1,
+                            envelope: {
+                                attack: this.random() * 2,
+                                decay: this.random() * 2,
+                                sustain: this.random() * 0.5 + 0.2,
+                                release: this.random() * 3
+                            }
                         }
                     }
                 };
             }
         };
 
-        // Create synth configurations
-        const padConfig = createSynthConfig();
-        const bassConfig = createSynthConfig();
-        const textureConfig = createSynthConfig();
-        const texture2Config = createSynthConfig();
+        // Create synth configurations with enhanced options
+        const synthConfigs = Array.from({length: 4}, () => createSynthConfig());
+        
+        // Initialize synths with filters and modulation
+        this.synths = synthConfigs.map(config => {
+            let synth;
+            if (config.type === 'FM') {
+                synth = new Tone.FMSynth(config.config);
+            } else if (config.type === 'AM') {
+                synth = new Tone.AMSynth(config.config);
+            } else {
+                synth = new Tone.PolySynth(Tone.Synth, config.config);
+            }
+            
+            // Add filter modulation
+            const filter = new Tone.Filter({
+                type: this.random() < 0.5 ? 'lowpass' : 'highpass',
+                frequency: this.random() * 10000 + 100,
+                Q: this.random() * 5 + 1
+            });
+            
+            // Add LFO for filter modulation
+            const filterLFO = new Tone.LFO({
+                frequency: this.random() * 0.5 + 0.1,
+                min: 100,
+                max: 5000
+            }).connect(filter.frequency);
+            
+            filterLFO.start();
+            
+            return synth.chain(filter, this.chorus);
+        });
+        
+        [this.padSynth, this.bassSynth, this.textureSynth, this.texture2Synth] = this.synths;
+    }
 
-        // Initialize synths based on configurations
-        this.padSynth = padConfig.type === 'FM' 
-            ? new Tone.FMSynth(padConfig.config).connect(this.chorus)
-            : new Tone.PolySynth(Tone.Synth, padConfig.config).connect(this.chorus);
-
-        this.bassSynth = bassConfig.type === 'FM'
-            ? new Tone.FMSynth(bassConfig.config).connect(this.mainReverb)
-            : new Tone.PolySynth(Tone.Synth, bassConfig.config).connect(this.mainReverb);
-
-        this.textureSynth = textureConfig.type === 'FM'
-            ? new Tone.FMSynth(textureConfig.config).connect(this.chorus)
-            : new Tone.PolySynth(Tone.Synth, textureConfig.config).connect(this.chorus);
-
-        this.texture2Synth = texture2Config.type === 'FM'
-            ? new Tone.FMSynth(texture2Config.config).connect(this.chorus)
-            : new Tone.PolySynth(Tone.Synth, texture2Config.config).connect(this.chorus);
+    createComplexEnvelope() {
+        return {
+            attack: this.random() * 2 + 0.1,
+            decay: this.random() * 2 + 0.1,
+            sustain: this.random() * 0.5 + 0.3,
+            release: this.random() * 4 + 1,
+            attackCurve: ['linear', 'exponential', 'sine', 'cosine'][Math.floor(this.random() * 4)],
+            releaseCurve: ['linear', 'exponential', 'sine', 'cosine'][Math.floor(this.random() * 4)]
+        };
     }
 
     generateMelody() {
@@ -254,6 +362,192 @@ class AmbientGenerator {
             console.error('Error toggling playback:', error);
             return false;
         }
+    }
+
+    generateChordProgression(scale) {
+        // Select a progression template based on seed
+        const template = this.progressionTemplates[Math.floor(this.random() * this.progressionTemplates.length)];
+        const progression = [];
+        
+        // Convert scale degrees to actual chords
+        for (const degree of template) {
+            // Get the root note for this degree
+            const rootIndex = (degree - 1) % scale.length;
+            const rootNote = scale[rootIndex];
+            
+            // Select a chord type based on the scale degree and seed
+            let chordTypeNames = Object.keys(this.chordTypes);
+            let chordType;
+            
+            // Use musical theory to select appropriate chord types
+            if (degree === 1 || degree === 4) {
+                // I and IV are often major
+                chordType = this.random() < 0.8 ? this.chordTypes.major : this.chordTypes.major7;
+            } else if (degree === 5) {
+                // V is often dominant
+                chordType = this.random() < 0.7 ? this.chordTypes.dominant7 : this.chordTypes.major;
+            } else if (degree === 6) {
+                // vi is often minor
+                chordType = this.random() < 0.8 ? this.chordTypes.minor : this.chordTypes.minor7;
+            } else {
+                // Random selection for other degrees
+                chordType = this.chordTypes[chordTypeNames[Math.floor(this.random() * chordTypeNames.length)]];
+            }
+            
+            // Build the chord by adding intervals to the root note
+            const chord = chordType.map(interval => {
+                const noteIndex = (rootIndex + Math.floor(interval / 2)) % scale.length;
+                return scale[noteIndex];
+            });
+            
+            progression.push(chord);
+        }
+        
+        return progression;
+    }
+
+    initializeParameterChanges() {
+        // Create seeded parameter evolution paths
+        return {
+            filterFrequency: {
+                min: 200,
+                max: 8000,
+                current: 2000,
+                rate: this.random() * 0.1,
+                direction: 1
+            },
+            reverbDecay: {
+                min: 2,
+                max: 10,
+                current: 5,
+                rate: this.random() * 0.05,
+                direction: 1
+            },
+            delayFeedback: {
+                min: 0.1,
+                max: 0.6,
+                current: 0.3,
+                rate: this.random() * 0.03,
+                direction: 1
+            },
+            chorusDepth: {
+                min: 0.2,
+                max: 0.8,
+                current: 0.5,
+                rate: this.random() * 0.04,
+                direction: 1
+            }
+        };
+    }
+
+    evolveParameters(time) {
+        const transportTime = Tone.Transport.position;
+        const [bars] = transportTime.split(':').map(Number);
+        
+        // Check for section change
+        if (bars >= (this.evolutionState.currentSection + 1) * this.evolutionState.sectionDuration) {
+            this.evolutionState.currentSection++;
+            this.transitionToNewSection(time);
+        }
+
+        // Update continuous parameters
+        Object.values(this.evolutionState.parameterChanges).forEach(param => {
+            // Update direction with some probability
+            if (this.random() < 0.05) {
+                param.direction *= -1;
+            }
+
+            // Update parameter value
+            param.current += param.rate * param.direction;
+
+            // Bounce at boundaries
+            if (param.current > param.max) {
+                param.current = param.max;
+                param.direction = -1;
+            } else if (param.current < param.min) {
+                param.current = param.min;
+                param.direction = 1;
+            }
+        });
+
+        // Apply parameter changes
+        const params = this.evolutionState.parameterChanges;
+        
+        // Update filter frequencies
+        this.synths.forEach(synth => {
+            if (synth.filter) {
+                synth.filter.frequency.rampTo(params.filterFrequency.current, 0.1);
+            }
+        });
+
+        // Update effects
+        this.mainReverb.decay = params.reverbDecay.current;
+        this.delay.feedback.rampTo(params.delayFeedback.current, 0.1);
+        this.chorus.depth.rampTo(params.chorusDepth.current, 0.1);
+    }
+
+    transitionToNewSection(time) {
+        // Generate new musical material based on seed and section number
+        const newScale = this.getRandomScale();
+        const newProgression = this.generateChordProgression(newScale);
+        
+        // Update patterns with new musical material
+        this.updatePatterns(newScale, newProgression, time);
+        
+        // Randomize some synth parameters
+        this.synths.forEach(synth => {
+            if (this.random() < 0.3) { // 30% chance to update each synth
+                const newEnvelope = this.createComplexEnvelope();
+                synth.set({
+                    envelope: newEnvelope
+                });
+            }
+        });
+    }
+
+    updatePatterns(scale, progression, time) {
+        // Update existing patterns with new musical material
+        const baseOctave = this.getRandomOctave();
+        
+        // Update pad pattern
+        this.padLoop.callback = time => {
+            if (this.random() < 0.8) {
+                const chordIndex = Math.floor(Tone.Transport.position.split(':')[0] % progression.length);
+                const chord = progression[chordIndex];
+                const note = chord[Math.floor(this.random() * chord.length)] + baseOctave;
+                this.padSynth.triggerAttackRelease(note, this.getRandomTiming(), time);
+            }
+        };
+
+        // Update bass pattern
+        this.bassLoop.callback = time => {
+            if (this.random() < 0.9) {
+                const chordIndex = Math.floor(Tone.Transport.position.split(':')[0] % progression.length);
+                const rootNote = progression[chordIndex][0];
+                const octave = this.random() < 0.2 ? -24 : -12;
+                const note = Tone.Frequency(rootNote).transpose(octave);
+                this.bassSynth.triggerAttackRelease(note, "1n", time);
+            }
+        };
+
+        // Update texture patterns with more variation
+        this.textureLoop.callback = time => {
+            if (this.random() < 0.7) {
+                const note = scale[Math.floor(this.random() * scale.length)] + (baseOctave + 1);
+                const duration = this.getRandomTiming();
+                this.textureSynth.triggerAttackRelease(note, duration, time);
+            }
+        };
+
+        this.texture2Loop.callback = time => {
+            if (this.random() < 0.6) {
+                const chordIndex = Math.floor(Tone.Transport.position.split(':')[0] % progression.length);
+                const chord = progression[chordIndex];
+                const note = chord[Math.floor(this.random() * chord.length)] + (baseOctave + 2);
+                const duration = this.getRandomTiming();
+                this.texture2Synth.triggerAttackRelease(note, duration, time);
+            }
+        };
     }
 }
 
