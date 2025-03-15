@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Gradient definitions -->
+  <defs>
+    <linearGradient id="synthwaveGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff00ff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00ffff;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.5" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="32" height="32" fill="black" />
+
+  <!-- Infinity sign -->
+  <path 
+    d="M8 16 C8 13 10 11 12 11 C14 11 16 13 16 16 C16 19 14 21 12 21 C10 21 8 19 8 16 Z
+       M24 16 C24 13 22 11 20 11 C18 11 16 13 16 16 C16 19 18 21 20 21 C22 21 24 19 24 16 Z"
+    stroke="url(#synthwaveGradient)" 
+    stroke-width="1.5"
+    fill="none"
+    filter="url(#glow)" />
+
+  <!-- Ambient wave overlay -->
+  <path 
+    d="M8 16 Q16 13 24 16 Q16 19 8 16" 
+    stroke="url(#synthwaveGradient)" 
+    stroke-width="0.75"
+    fill="none"
+    opacity="0.6"
+    filter="url(#glow)" />
+</svg> 
