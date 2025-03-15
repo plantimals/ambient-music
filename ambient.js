@@ -20,6 +20,11 @@ class AmbientGenerator {
             // Ensure Tone.js is started before any initialization
             await Tone.start();
             
+            // Reset any existing transport state
+            Tone.Transport.cancel(0);
+            Tone.Transport.stop();
+            Tone.Transport.position = 0;
+            
             // Initialize Tone.js components
             await this.initializeComponents();
             this.setupEffects();
@@ -191,15 +196,21 @@ class AmbientGenerator {
                 if (!this.initialized) {
                     await this.initialize();
                 }
-                this.padLoop.start();
-                this.bassLoop.start();
-                this.textureLoop.start();
+                // Reset transport before starting
+                Tone.Transport.cancel(0);
+                Tone.Transport.stop();
+                Tone.Transport.position = 0;
+                
+                this.padLoop.start(0);
+                this.bassLoop.start("0:1");  // Start bass loop slightly offset
+                this.textureLoop.start("0:2");  // Start texture loop even more offset
                 Tone.Transport.start();
             } else {
                 this.padLoop.stop();
                 this.bassLoop.stop();
                 this.textureLoop.stop();
                 Tone.Transport.stop();
+                Tone.Transport.position = 0;
             }
             
             this.isPlaying = !this.isPlaying;
@@ -217,80 +228,90 @@ class NostrLogin {
         this.pubkey = null;
         this.generator = null;
         this.loginButton = document.getElementById('loginButton');
-        this.logoutButton = document.getElementById('logoutButton');
         this.userInfo = document.getElementById('userInfo');
         this.playPauseButton = document.getElementById('playPauseButton');
         
-        this.setupEventListeners();
-        // Try automatic login
-        this.attemptAutoLogin();
+        // Wait for DOM to be fully loaded before attempting auto-login
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                this.setupEventListeners();
+                this.attemptAutoLogin();
+            });
+        } else {
+            this.setupEventListeners();
+            this.attemptAutoLogin();
+        }
     }
 
     setupEventListeners() {
         this.loginButton.addEventListener('click', () => this.login());
-        this.logoutButton.addEventListener('click', () => this.logout());
         
         // Add space bar event listener
         document.addEventListener('keydown', async (event) => {
             if (event.code === 'Space' && !event.repeat && !event.target.matches('input, textarea')) {
                 event.preventDefault();
-                if (this.generator) {
-                    await Tone.start();
-                    const isPlaying = await this.generator.togglePlayPause();
-                    this.playPauseButton.textContent = isPlaying ? 'Pause' : 'Play';
-                }
-            }
-        });
-        
-        // Move play button logic into the class
-        this.playPauseButton.addEventListener('click', async () => {
-            if (!this.generator) {
-                alert('Please login first');
-                return;
-            }
-
-            try {
-                await Tone.start();
-                const isPlaying = await this.generator.togglePlayPause();
-                this.playPauseButton.textContent = isPlaying ? 'Pause' : 'Play';
-            } catch (error) {
-                console.error('Error toggling playback:', error);
-                alert('Failed to start audio playback. Please try again.');
+                await this.togglePlay();
             }
         });
     }
 
     async attemptAutoLogin() {
+        // Wait a small amount of time to ensure nostr extension is loaded
+        await new Promise(resolve => setTimeout(resolve, 100));
+
         if (typeof window.nostr !== 'undefined') {
             try {
                 const pubkey = await window.nostr.getPublicKey();
                 if (pubkey) {
-                    this.pubkey = pubkey;
-                    const numericSeed = this.pubkey.split('').reduce((acc, char) => {
-                        return (acc * 31 + char.charCodeAt(0)) >>> 0;
-                    }, 0);
-                    
-                    this.loginButton.style.display = 'none';
-                    this.logoutButton.style.display = 'none';
-                    this.userInfo.style.display = 'block';
-                    this.playPauseButton.style.display = 'inline-block';
-                    
-                    this.userInfo.innerHTML = `<p>Connected with: ${this.pubkey.slice(0, 8)}...</p>`;
-
-                    this.generator = new AmbientGenerator(numericSeed);
-                    // Start playing automatically
-                    await this.generator.togglePlayPause();
-                    this.playPauseButton.textContent = 'Pause';
+                    await this.handleSuccessfulLogin(pubkey);
                 }
             } catch (error) {
-                console.log('Auto-login failed, manual login required');
-                // Show login button if auto-login fails
+                console.log('Auto-login failed, manual login required:', error);
                 this.loginButton.style.display = 'inline-block';
             }
         } else {
-            // Show login button if nostr is not available
+            console.log('Nostr not available, showing login button');
             this.loginButton.style.display = 'inline-block';
         }
+    }
+
+    async handleSuccessfulLogin(pubkey) {
+        this.pubkey = pubkey;
+        const numericSeed = this.pubkey.split('').reduce((acc, char) => {
+            return (acc * 31 + char.charCodeAt(0)) >>> 0;
+        }, 0);
+        
+        this.loginButton.style.display = 'none';
+        this.userInfo.style.display = 'block';
+        
+        const npub = NostrTools.nip19.npubEncode(this.pubkey);
+        this.userInfo.innerHTML = `
+            <p>${npub}</p>
+            <button id="startAudioButton" style="background: #8257e6; color: #ffffff; border: none; padding: 15px 30px; border-radius: 50px; cursor: pointer; margin-top: 10px;">Start Audio</button>
+        `;
+
+        // Add click handler for the start audio button
+        document.getElementById('startAudioButton').addEventListener('click', async () => {
+            try {
+                await Tone.start();
+                console.log("Tone.js started successfully");
+                
+                this.generator = new AmbientGenerator(numericSeed);
+                await this.generator.initialize();
+                console.log("Generator initialized");
+                
+                // Start playback
+                const isPlaying = await this.generator.togglePlayPause();
+                console.log("Playback started:", isPlaying);
+                
+                // Show play/pause button and hide start button
+                document.getElementById('startAudioButton').style.display = 'none';
+                this.playPauseButton.style.display = 'inline-block';
+                this.playPauseButton.textContent = 'Pause';
+            } catch (error) {
+                console.error("Audio initialization error:", error);
+            }
+        });
     }
 
     login() {
@@ -301,29 +322,10 @@ class NostrLogin {
 
         window.nostr.getPublicKey()
             .then(async pubkey => {
-                this.pubkey = pubkey;
-                
-                if (!this.pubkey) {
+                if (!pubkey) {
                     throw new Error('No public key received');
                 }
-
-                const numericSeed = this.pubkey.split('').reduce((acc, char) => {
-                    return (acc * 31 + char.charCodeAt(0)) >>> 0;
-                }, 0);
-                
-                this.loginButton.style.display = 'none';
-                this.logoutButton.style.display = 'none';
-                this.userInfo.style.display = 'block';
-                this.playPauseButton.style.display = 'inline-block';
-                
-                const npub = NostrTools.nip19.npubEncode(this.pubkey);
-                console.log('NPUB:', npub);
-                this.userInfo.innerHTML = `<p>${npub}</p>`;
-
-                this.generator = new AmbientGenerator(numericSeed);
-                // Start playing automatically
-                await this.generator.togglePlayPause();
-                this.playPauseButton.textContent = 'Pause';
+                await this.handleSuccessfulLogin(pubkey);
             })
             .catch(error => {
                 console.error('Error in getPublicKey:', error);
@@ -334,7 +336,6 @@ class NostrLogin {
     logout() {
         this.pubkey = null;
         this.loginButton.style.display = 'inline-block';
-        this.logoutButton.style.display = 'none';
         this.userInfo.style.display = 'none';
         this.playPauseButton.style.display = 'none';
         this.userInfo.innerHTML = '';
@@ -346,6 +347,22 @@ class NostrLogin {
             this.playPauseButton.textContent = 'Play';
         }
         this.generator = null;
+    }
+
+    async togglePlay() {
+        if (!this.generator) {
+            alert('Please login first');
+            return;
+        }
+
+        try {
+            await Tone.start();
+            const isPlaying = await this.generator.togglePlayPause();
+            this.playPauseButton.textContent = isPlaying ? 'Pause' : 'Play';
+        } catch (error) {
+            console.error('Error toggling playback:', error);
+            alert('Failed to start audio playback. Please try again.');
+        }
     }
 }
 
