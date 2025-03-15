@@ -277,13 +277,11 @@ class NostrLogin {
 
     async fetchProfile(pubkey) {
         try {
-
             const pool = new NostrTools.SimplePool();
             const relays = [
                 'wss://relay.damus.io',
                 'wss://nos.lol',
                 'wss://relay.nostr.band',
-                'wss://relay.current.fyi',
                 'wss://nostr.mom'
             ];
 
@@ -305,9 +303,10 @@ class NostrLogin {
                 if (profileEvent) {
                     try {
                         const content = JSON.parse(profileEvent.content);
-                        if (content.picture) {
-                            return content.picture;
-                        }
+                        return {
+                            picture: content.picture || null,
+                            name: content.name || content.display_name || null
+                        };
                     } catch (e) {
                         console.error("Error parsing profile content:", e);
                     }
@@ -317,23 +316,30 @@ class NostrLogin {
                 pool.close(relays);
             }
 
-            return null;
+            return { picture: null, name: null };
         } catch (error) {
             console.error("Error fetching profile:", error);
-            return null;
+            return { picture: null, name: null };
         }
     }
 
-    async updateAvatar(avatarUrl) {
+    async updateUserDisplay(avatarUrl, displayName) {
         const avatar = this.userInfo.querySelector('.avatar');
         const npub = NostrTools.nip19.npubEncode(this.pubkey);
         const shortNpub = `${npub.slice(0, 8)}...${npub.slice(-4)}`;
 
+        // Update avatar
         if (avatarUrl) {
             avatar.innerHTML = `<img src="${avatarUrl}" alt="Profile" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
         } else {
             avatar.textContent = shortNpub.slice(0, 2).toUpperCase();
         }
+
+        // Update display name/npub
+        const npubSpan = this.userInfo.querySelector('.npub');
+        npubSpan.textContent = displayName || shortNpub;
+        // Add title with full npub for hover
+        npubSpan.title = npub;
     }
 
     async handleSuccessfulLogin(pubkey) {
@@ -345,21 +351,12 @@ class NostrLogin {
         this.loginButton.style.display = 'none';
         this.userInfo.style.display = 'flex';
         
-        const npub = NostrTools.nip19.npubEncode(this.pubkey);
-        const shortNpub = `${npub.slice(0, 8)}...${npub.slice(-4)}`;
+        // Set default display while loading
+        await this.updateUserDisplay(null, null);
         
-        // Update the npub display
-        const npubSpan = this.userInfo.querySelector('.npub');
-        npubSpan.textContent = shortNpub;
-        
-        // Set default avatar while loading
-        await this.updateAvatar(null);
-        
-        // Fetch and update avatar
-        const avatarUrl = await this.fetchProfile(this.pubkey);
-        if (avatarUrl) {
-            await this.updateAvatar(avatarUrl);
-        }
+        // Fetch and update profile
+        const profile = await this.fetchProfile(this.pubkey);
+        await this.updateUserDisplay(profile.picture, profile.name);
         
         // Add the start audio button to the main content
         const mainContent = document.querySelector('.main-content');
