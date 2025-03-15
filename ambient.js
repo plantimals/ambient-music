@@ -230,6 +230,18 @@ class NostrLogin {
         this.loginButton.addEventListener('click', () => this.login());
         this.logoutButton.addEventListener('click', () => this.logout());
         
+        // Add space bar event listener
+        document.addEventListener('keydown', async (event) => {
+            if (event.code === 'Space' && !event.repeat && !event.target.matches('input, textarea')) {
+                event.preventDefault();
+                if (this.generator) {
+                    await Tone.start();
+                    const isPlaying = await this.generator.togglePlayPause();
+                    this.playPauseButton.textContent = isPlaying ? 'Pause' : 'Play';
+                }
+            }
+        });
+        
         // Move play button logic into the class
         this.playPauseButton.addEventListener('click', async () => {
             if (!this.generator) {
@@ -238,6 +250,7 @@ class NostrLogin {
             }
 
             try {
+                await Tone.start();
                 const isPlaying = await this.generator.togglePlayPause();
                 this.playPauseButton.textContent = isPlaying ? 'Pause' : 'Play';
             } catch (error) {
@@ -305,7 +318,7 @@ class NostrLogin {
                 
                 const npub = NostrTools.nip19.npubEncode(this.pubkey);
                 console.log('NPUB:', npub);
-                this.userInfo.innerHTML = `<p>Connected with: ${npub.slice(0, 12)}...</p>`;
+                this.userInfo.innerHTML = `<p>${npub}</p>`;
 
                 this.generator = new AmbientGenerator(numericSeed);
                 // Start playing automatically
